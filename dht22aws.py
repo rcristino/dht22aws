@@ -1,11 +1,11 @@
 import time
 import board
 import adafruit_dht
-import boto3
-from datetime import datetime
 from decimal import Decimal
+import datetime
 import logging
 from logging.handlers import RotatingFileHandler
+import requests
 import environment
 
 logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
@@ -17,35 +17,41 @@ fileHandler.setFormatter(logFormatter)
 rootLogger.addHandler(fileHandler)
 
 # Initialize DHT22 sensor
-dht_device = adafruit_dht.DHT22(board.D4) # data pin from DHT22 which is connected
+#### dht_device = adafruit_dht.DHT22(board.D4) # data pin from DHT22 which is connected
 
-dynamodb = boto3.resource('dynamodb', region_name='eu-west-1')
-table = dynamodb.Table(environment.DB_TABLE)
 
-def store_in_dynamodb(dt_string, temperature, humidity):
-    table.put_item(
-        Item={
+def store_via_api(dt_string, temperature, humidity):
+    apiUrl = environment.API_URL
+    apiKey = environment.API_KEY
+    headers = {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+        }
+    payload = {
             'timestamp': dt_string,
             'id': environment.DEVICE_ID,
             'temperature': temperature,
             'humidity': humidity
-        }
-    )
+    }
+
+    response = requests.post(apiUrl, json=payload, headers=headers)
+
+    rootLogger.info("Status Code: {} Response Body: {}".format(response.status_code, response.json()))
 
 
 def get_and_store():
     while True:
         try:
-            temperature = Decimal(str(dht_device.temperature))
-            humidity = Decimal(str(dht_device.humidity))
+            temperature = 99 #Decimal(str(dht_device.temperature))
+            humidity = 10 #Decimal(str(dht_device.humidity))
 
             # datetime object containing current date and time
-            now = datetime.utcnow()
+            now = datetime.datetime.now(datetime.UTC)
             dt_string = now.strftime("%d-%m-%Y %H:%M:%S")
 
-            store_in_dynamodb(dt_string, temperature, humidity)
-
             rootLogger.info("Temp:{:.1f} C  Humidity: {}%".format(temperature, humidity))
+
+            store_via_api(dt_string, temperature, humidity)
 
             time.sleep(int(environment.SLEEP))
 
