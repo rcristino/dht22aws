@@ -25,7 +25,7 @@ def store_via_api(dt_string, temperature, humidity):
     apiKey = environment.API_KEY
     headers = {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey
+        'X-Api-Key': apiKey
         }
     payload = {
             'timestamp': dt_string,
@@ -42,12 +42,14 @@ def store_via_api(dt_string, temperature, humidity):
 def get_and_store():
     while True:
         try:
-            temperature = 99 #Decimal(str(dht_device.temperature))
-            humidity = 10 #Decimal(str(dht_device.humidity))
+            temperature = 77 #Decimal(str(dht_device.temperature))
+            humidity = 15 #Decimal(str(dht_device.humidity))
 
             # datetime object containing current date and time
             now = datetime.datetime.now(datetime.UTC)
-            dt_string = now.strftime("%d-%m-%Y %H:%M:%S")
+
+            # Convert to ISO 8601 format string
+            dt_string  = now.isoformat()
 
             rootLogger.info("Temp:{:.1f} C  Humidity: {}%".format(temperature, humidity))
 

@@ -3,10 +3,16 @@ from botocore.exceptions import ClientError
 import json
 from boto3.dynamodb.conditions import Key
 from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 import logging
 
+# Initialize Logger
 logger = logging.getLogger()
 logger.setLevel("INFO")
+
+# Initialize the DynamoDB resource
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('MY_TABLE')
 
 # Custom encoder to handle Decimal objects
 class DecimalEncoder(json.JSONEncoder):
@@ -16,30 +22,69 @@ class DecimalEncoder(json.JSONEncoder):
             return int(obj) if obj % 1 == 0 else float(obj)
         return super(DecimalEncoder, self).default(obj)
 
+def add_one_hour_to_timestamp(timestamp):
+    # Convert Unix timestamp to datetime object (in UTC)
+    timestamp_dt = datetime.utcfromtimestamp(int(timestamp))
+    # Add one hour to adjust for the timezone offset (e.g., UTC+1 like Irland where storage is located)
+    adjusted_timestamp = timestamp_dt + timedelta(hours=1)
+    # Return the adjusted timestamp in ISO 8601 format (with 'Z' to indicate UTC)
+    return adjusted_timestamp.isoformat() + 'Z'
 
 def handle_get(event):
-    # Extract the key from the API Gateway event (e.g., query parameters)
+    # Parse the request body
     query_params = event.get('queryStringParameters', {})
-    partition_key = query_params.get('id', None)  # Replace 'key' with your partition key name
+    start = query_params.get('start')
+    end = query_params.get('end')
+    partition_key = query_params.get('id', None)
 
     if not partition_key:
         return {
             'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+            },
             'body': json.dumps({'error': 'Missing required query parameter'})
         }
 
+    # Get the current UTC time (timezone-aware)
+    now_utc = datetime.now(timezone.utc)
+    
+    # Set default range: now to 30 days ago
+    if not end:
+        end = int(now.timestamp())
+    if not start:
+        start = int((now - timedelta(days=30)).timestamp())
+        
     try:
-        dynamodb = boto3.resource('MY_STORAGE')
-        table = dynamodb.Table('MY_TABLE')
+        # Convert Unix timestamps to ISO 8601 string format
+        start_date = add_one_hour_to_timestamp(int(start))
+        end_date = add_one_hour_to_timestamp(int(end))
 
-        # Query the table for the latest 10,000 items for the provided key
-        response = table.query(
-            KeyConditionExpression=Key('id').eq(partition_key),  # Replace with your partition key name
-            Limit=10000,  # Fetch up to 10,000 entries
-            ScanIndexForward=True  # Fetch the first items first
+        logger.info("Query arguments: id: " + partition_key + " start: " + start_date + " end: " + end_date)
+
+        # Query DynamoDB
+        response = table.scan(
+            FilterExpression="#deviceId = :deviceId AND #timestamp BETWEEN :start AND :end",
+            ExpressionAttributeNames={
+                "#deviceId": "id",
+                "#timestamp": "timestamp"
+            },
+            ExpressionAttributeValues={
+                ":deviceId": partition_key,
+                ":start": start_date,
+                ":end": end_date
+            }
         )
-            
+
         items = response.get('Items', [])
+
+        # Convert the timestamp in the database to UTC and return the results
+        for item in items:
+                    if 'Timestamp' in item:
+                        # Ensure the timestamp is correctly in UTC when processing
+                        item['Timestamp'] = datetime.datetime.fromisoformat(item['Timestamp']).astimezone(datetime.timezone.utc).isoformat()
 
         return {
             'statusCode': 200,
@@ -54,15 +99,17 @@ def handle_get(event):
     except Exception as e:
         return {
             'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+            },
             'body': json.dumps({'error': str(e)})
         }
 
 
 def handle_post(event):
     try:
-        dynamodb = boto3.resource('MY_STORAGE')
-        table = dynamodb.Table('MY_TABLE')
-
         # Parse the request body
         body = json.loads(event.get('body', '{}'))
         temperature = body.get('temperature')
@@ -73,9 +120,28 @@ def handle_post(event):
         if temperature is None or humidity is None or id is None or timestamp is None:
             return {
                 'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Credentials': 'true',
+                },
                 'body': json.dumps({'error': 'Missing required fields: temperature, humidity'})
             }
 
+        # Validate ISO 8601 timestamp format
+        try:
+            datetime.fromisoformat(timestamp)
+        except ValueError:
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Credentials': 'true',
+                },
+                'body': json.dumps({'error': 'Invalid timestamp format. Use ISO 8601 format.'})
+            }
+            
         # Insert item into DynamoDB
         table.put_item(Item={
             'timestamp': timestamp,
@@ -86,16 +152,31 @@ def handle_post(event):
 
         return {
             'statusCode': 201,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+            },
             'body': json.dumps({'message': 'Data added successfully', 'timestamp': timestamp, 'id': id})
         }
     except ClientError as e:
         return {
             'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+            },
             'body': json.dumps({'error': str(e)})
         }
     except json.JSONDecodeError:
         return {
             'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+            },
             'body': json.dumps({'error': 'Invalid JSON in request body'})
         }
 
@@ -117,5 +198,10 @@ def lambda_handler(event, context):
         # Unsupported method
         return {
             'statusCode': 405,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Credentials': 'true',
+            },
             'body': json.dumps({'error': 'Method Not Allowed'})
         }

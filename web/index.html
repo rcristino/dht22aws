@@ -1,99 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Temperature and Humidity Graph</title>
+    <title>Temperature and Humidity Monitoring Board</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="shortcut icon" href="#">
+    <link rel="shortcut icon" href="thermometer-icon.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Temperature and Humidity</h1>
-    <canvas id="myChart" width="400" height="200"></canvas>
-    <script>
-        // Fetch data from the API
-	const apiUrl = 'API_URL';
-	const apiKey = 'API_KEY'; // API key obtained from API Gateway
+    <h1>Temperature and Humidity Monitoring Board</h1>
 
-	// Sample data or query parameters
-	const params = new URLSearchParams({ id: 'YOUR_ID' });
+    <div class="form-group">
+        <label for="deviceSelect">Select Device:</label>
+        <select id="deviceSelect">
+          <option value="MY_DEVICE">MY_DEVICE</option>
+        </select>
+    </div>
+      
+    <div class="form-group">
+        <label for="start">Start Timestamp (UTC):</label>
+        <input type="datetime-local" id="start" name="start">
+    </div>
 
-	// Construct the full URL with query parameters
-	const urlWithParams = `${apiUrl}?${params.toString()}`;
+    <div class="form-group">
+        <label for="end">End Timestamp (UTC):</label>
+        <input type="datetime-local" id="end" name="end">
+    </div>
 
-        // Fetch data from the API
-        fetch(urlWithParams, {
-            method: 'GET', // or 'POST' if you're sending data
-            headers: {
-                'Content-Type': 'application/json', // Optional, if you're sending JSON data
-                'x-api-key': apiKey // Pass the API key in the header
-           },
-           mode: 'cors',  // Ensure CORS mode is set for cross-origin requests
-       })
-       .then(response => response.json())
-       .then(rawData=> {
-           console.log('API Response:', rawData);
+    <button id="resetButton">Reset Dates</button>
+    <button onclick="loadGraph()">Load Graph</button>
 
-            // Filter data for the specific device ID
-            const deviceId = "YOUR_ID";
-            const filteredData = rawData.filter(item => item.id === deviceId);
+    <!-- Canvas for the chart -->
+    <canvas id="temperatureHumidityChart"></canvas>
 
-            // Extract the relevant data
-            const timestamps = filteredData.map(item => item.timestamp);
-            const temperatures = filteredData.map(item => item.temperature);
-            const humidity = filteredData.map(item => item.humidity);
-
-           const ctx = document.getElementById('myChart').getContext('2d');
-           // Create a new Chart.js chart
-           new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: timestamps,
-                    datasets: [
-                        {
-                            label: 'Temperature (Celsius)',
-                            data: temperatures,
-                            borderColor: 'rgba(255, 99, 132, 1)',
-                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                            borderWidth: 1
-                        },
-                        {
-                            label: 'Humidity (%)',
-                            data: humidity,
-                            borderColor: 'rgba(54, 162, 235, 1)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                            borderWidth: 1
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                            legend: {
-                                display: true
-                            }
-                        },
-                        scales: {
-                            x: {
-                                title: {
-                                    display: true,
-                                    text: 'Time'
-                                }
-                            },
-                            y: {
-                                title: {
-                                    display: true,
-                                    text: 'Value'
-                                },
-                                beginAtZero: true
-                            }
-                        }
-                    }
-                });
-       })
-       .catch(error => {
-           console.error('Error:', error);
-       });
-    </script>
+    <script src="getData.js"></script>
 </body>
 </html>
